@@ -1,7 +1,9 @@
 # 网易云音乐下载器
+
 基于Python3.X编写的网易云音乐命令行下载器，自动下载专辑封面，记录歌手名、音乐标题、专辑名等元数据，并写入[ID3 Tags][1] metadata容器。在github上试了几个高星的下载器都没有写入专辑封面，对于强迫症患者简直不能忍，于是一怒之下决定自己写。
 
 ## Preview
+
 ![Preview](preview.gif)
 
 ## Installation
@@ -16,44 +18,51 @@
 ### 安装 uv
 
 **macOS / Linux:**
+
 ```bash
-$ brew install uv
+brew install uv
 ```
 
 或者使用官方安装脚本：
+
 ```bash
-$ curl -LsSf https://astral.sh/uv/install.sh | sh
+curl -LsSf https://astral.sh/uv/install.sh | sh
 ```
 
 **Windows:**
+
 ```powershell
-$ powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"
+powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"
 ```
 
 ### 安装项目
 
 首先克隆源码：
+
 ```bash
-$ git clone https://github.com/codezjx/netease-cloud-music-dl.git
-$ cd netease-cloud-music-dl
+git clone https://github.com/codezjx/netease-cloud-music-dl.git
+cd netease-cloud-music-dl
 ```
 
 创建虚拟环境并安装项目：
+
 ```bash
-$ uv venv venv
-$ source venv/bin/activate  # Linux/macOS
-$ venv\Scripts\activate     # Windows
-$ uv pip install -e .
+uv venv venv
+source venv/bin/activate  # Linux/macOS
+venv\Scripts\activate     # Windows
+uv pip install -e .
 ```
 
 安装成功后，可以通过 `ncm` 命令使用本工具。
 
 ## Feature
-- 支持下载专辑封面并嵌入MP3文件
+
+- 支持下载专辑封面并嵌入音乐文件
 - 支持写入歌手名、音乐标题、专辑名等信息至[ID3 Tags][1]
 - 支持跳过已下载的音频文件
 - 支持常见设置选项，如：保存路径、音乐命名格式、文件智能分类等
-- 默认下载比特率为320k的高品质音乐（若木有320k则会自动下载最高比特率）
+- 支持多种音质选择：FLAC无损、320k、192k、128k（默认FLAC，若无损不可用则自动降级至320k）
+- 支持使用账号Cookie下载VIP/付费音乐
 - 支持下载单首/多首歌曲
 - 支持下载歌手热门单曲（可配置最大下载数）
 - 支持下载专辑所有歌曲
@@ -62,6 +71,7 @@ $ uv pip install -e .
 **（注意：已下架的音乐暂时无法下载）**
 
 通过`ncm -h`即可查看所支持的参数列表：
+
 ```
 $ ncm -h
 usage: ncm [-h] [-s song_id] [-ss song_ids [song_ids ...]] [-hot artist_id]
@@ -82,6 +92,7 @@ optional arguments:
 ### 下载单曲
 
 使用参数`-s`，后加歌曲id或者歌曲完整url，如：
+
 ```bash
 $ ncm -s 123123
 or
@@ -91,6 +102,7 @@ $ ncm -s http://music.163.com/#/song?id=123123
 ### 下载多首歌曲
 
 使用参数`-ss`，后加歌曲ids或者歌曲完整urls(id或url之间通过空格隔开)，如：
+
 ```bash
 $ ncm -ss 123123 456456 789789
 or
@@ -100,6 +112,7 @@ $ ncm -ss url1 url2 url3
 ### 下载某歌手的热门单曲(默认下50首，可配置)
 
 使用参数`-hot`，后加歌手id或者完整url，如：
+
 ```bash
 $ ncm -hot 123123
 or
@@ -117,11 +130,13 @@ $ ncm -hot http://music.163.com/#/artist?id=123123
 ## Settings
 
 配置文件在在用户目录下自动生成，路径如下：
+
 ```
 /Users/yourUserName/.ncm/ncm.ini
 ```
 
 目前支持以下几项设置：
+
 ```
 [settings]
 
@@ -135,6 +150,16 @@ download.hot_max = 50
 # 音乐文件的下载路径，默认在用户目录.ncm/download目录下
 #--------------------------------------
 download.dir = /Users/yourUserName/.ncm/download
+
+#--------------------------------------
+# 音频质量，可选值：
+# flac  - 无损FLAC格式（最佳音质，文件较大）
+# 320k  - 高品质MP3 320kbps
+# 192k  - 中等品质MP3 192kbps
+# 128k  - 标准品质MP3 128kbps
+# 默认值：flac
+#--------------------------------------
+download.audio_quality = flac
 
 #--------------------------------------
 # 音乐命名格式，默认1
@@ -151,6 +176,19 @@ song.name_type = 1
 # 3: 按歌手/专辑分文件夹
 #--------------------------------------
 song.folder_type = 1
+
+[auth]
+
+#--------------------------------------
+# 网易云音乐账号Cookie（可选）
+# 用于下载VIP/付费音乐
+# 获取方法：
+# 1. 在浏览器中登录 music.163.com
+# 2. 打开开发者工具（F12）-> Network（网络）标签
+# 3. 刷新页面，找到任意请求
+# 4. 复制请求头中的 Cookie 值
+#--------------------------------------
+auth.cookie =
 ```
 
 **Warning:** 智能分类设置目前只针对`-s`和`-ss`参数有效，`-hot/-a/-p`分别会存于后缀为：`-hot50/-album/-playlist`的文件夹中，方便管理本地音乐。

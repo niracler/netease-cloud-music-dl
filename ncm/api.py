@@ -4,7 +4,7 @@ import requests
 import time
 
 from ncm.encrypt import encrypted_request
-from ncm.constants import headers, get_program_url, program_download_url
+from ncm.constants import get_headers, get_program_url, program_download_url
 from ncm.constants import song_download_url
 from ncm.constants import get_song_url
 from ncm.constants import get_album_url
@@ -14,10 +14,10 @@ from ncm.constants import get_playlist_url
 
 class CloudApi(object):
 
-    def __init__(self, timeout=30):
+    def __init__(self, timeout=30, user_cookie=None):
         super().__init__()
         self.session = requests.session()
-        self.session.headers.update(headers)
+        self.session.headers.update(get_headers(user_cookie))
         self.timeout = timeout
 
     def get_request(self, url):
@@ -91,15 +91,22 @@ class CloudApi(object):
     def get_song_url(self, song_id, bit_rate=320000):
         """Get a song's download url.
         :params song_id: song id<int>.
-        :params bit_rate: {'MD 128k': 128000, 'HD 320k': 320000}
+        :params bit_rate: {
+            'SD 128k': 128000,
+            'HD 192k': 192000,
+            'HD 320k': 320000,
+            'Lossless': 999000  # FLAC
+        }
         :return:
         """
         url = song_download_url
         csrf = ''
         params = {'ids': [song_id], 'br': bit_rate, 'csrf_token': csrf}
         result = self.post_request(url, params)
-        song_url = result['data'][0]['url']
-        return song_url
+        if result and result.get('data') and len(result['data']) > 0:
+            song_url = result['data'][0]['url']
+            return song_url
+        return None
 
     def get_hot_songs(self, artist_id):
         """

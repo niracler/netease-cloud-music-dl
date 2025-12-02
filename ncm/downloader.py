@@ -10,8 +10,24 @@ from ncm.file_util import add_metadata_to_song
 from ncm.file_util import resize_img
 
 
+def get_bitrate_from_quality(quality):
+    """Convert quality string to bitrate"""
+    quality_map = {
+        'flac': 999000,
+        '320k': 320000,
+        '192k': 192000,
+        '128k': 128000
+    }
+    return quality_map.get(quality.lower(), 999000)  # Default to FLAC
+
+
+def get_file_extension(quality):
+    """Get file extension based on quality"""
+    return '.flac' if quality.lower() == 'flac' else '.mp3'
+
+
 def get_song_info_by_id(song_id):
-    api = CloudApi()
+    api = CloudApi(user_cookie=config.USER_COOKIE)
     song = api.get_song(song_id)
     return song
 
@@ -24,7 +40,7 @@ def download_song_by_id(song_id, download_folder, sub_folder=True):
 
 def download_song_by_song(song, download_folder, sub_folder=True, program=False):
     # get song info
-    api = CloudApi()
+    api = CloudApi(user_cookie=config.USER_COOKIE)
     song_id = song['id']
     song_name = format_string(song['name'])
     if program:
@@ -34,12 +50,15 @@ def download_song_by_song(song, download_folder, sub_folder=True, program=False)
         artist_name = format_string(song['artists'][0]['name'])
         album_name = format_string(song['album']['name'])
 
+    # Get file extension based on audio quality
+    file_ext = get_file_extension(config.AUDIO_QUALITY)
+
     # update song file name by config
-    song_file_name = '{}.mp3'.format(song_name)
+    song_file_name = '{}{}'.format(song_name, file_ext)
     switcher_song = {
         1: song_file_name,
-        2: '{} - {}.mp3'.format(artist_name, song_name),
-        3: '{} - {}.mp3'.format(song_name, artist_name)
+        2: '{} - {}{}'.format(artist_name, song_name, file_ext),
+        3: '{} - {}{}'.format(song_name, artist_name, file_ext)
     }
     song_file_name = switcher_song.get(config.SONG_NAME_TYPE, song_file_name)
 
@@ -54,11 +73,22 @@ def download_song_by_song(song, download_folder, sub_folder=True, program=False)
     else:
         song_download_folder = download_folder
 
-    # download song
+    # download song with quality fallback
+    song_url = None
     if program:
         song_url = api.get_program_url(song, level="standard")
     else:
-        song_url = api.get_song_url(song_id)
+        # Get bitrate from config
+        bitrate = get_bitrate_from_quality(config.AUDIO_QUALITY)
+        song_url = api.get_song_url(song_id, bit_rate=bitrate)
+
+        # Fallback to lower quality if not available
+        if song_url is None and bitrate == 999000:
+            print('FLAC not available, trying 320k...')
+            song_url = api.get_song_url(song_id, bit_rate=320000)
+            if song_url:
+                # Update filename to .mp3 if we fallback
+                song_file_name = song_file_name.replace('.flac', '.mp3')
 
     if song_url is None:
         print('Song <<{}>> is not available due to copyright issue!'.format(song_name))
