@@ -1,0 +1,32 @@
+[project]
+name = "netease-cloud-music-dl"
+version = "0.3.0"
+description = "Netease cloud music song downloader, with full ID3 metadata!"
+authors = [
+    {name = "codezjx", email = "code.zjx@gmail.com"}
+]
+readme = "README.md"
+license = {text = "MIT"}
+requires-python = ">=3.9"
+keywords = ["ncm", "netease", "cloud-music", "downloader"]
+
+dependencies = [
+    "requests>=2.17.3",
+    "pycryptodomex",
+    "mutagen>=1.38.0",
+    "Pillow>=12.0.0",
+]
+
+[project.urls]
+Homepage = "https://github.com/codezjx/netease-cloud-music-dl"
+
+[project.scripts]
+ncm = "ncm.start:main"
+
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["ncm*"]

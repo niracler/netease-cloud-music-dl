@@ -6,31 +6,47 @@
 
 ## Installation
 
-若没有安装Python3，请先到官网下载并安装：
-> https://www.python.org/download/releases/3.0/
+本项目使用现代化的 Python 包管理工具 [uv](https://docs.astral.sh/uv/)。
 
+### 前置要求
 
-首先下载源码：
+- Python 3.10 或更高版本
+- [uv](https://docs.astral.sh/uv/) 包管理工具
+
+### 安装 uv
+
+**macOS / Linux:**
+```bash
+$ brew install uv
+```
+
+或者使用官方安装脚本：
+```bash
+$ curl -LsSf https://astral.sh/uv/install.sh | sh
+```
+
+**Windows:**
+```powershell
+$ powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"
+```
+
+### 安装项目
+
+首先克隆源码：
 ```bash
 $ git clone https://github.com/codezjx/netease-cloud-music-dl.git
+$ cd netease-cloud-music-dl
 ```
 
-进入根目录，然后执行：
+创建虚拟环境并安装项目：
 ```bash
-$ python3 setup.py install
+$ uv venv venv
+$ source venv/bin/activate  # Linux/macOS
+$ venv\Scripts\activate     # Windows
+$ uv pip install -e .
 ```
 
-最终显示以下log，表示顺利安装：
-```
-running install
-running bdist_egg
-running egg_info
-...
-...
-Finished processing dependencies for netease-cloud-music-dl==x.x.x
-```
-
-后续直接在命令行中通过`ncm`指令即可快速调用相关功能，**Warning: 目前只支持Python3.x版本**
+安装成功后，可以通过 `ncm` 命令使用本工具。
 
 ## Feature
 - 支持下载专辑封面并嵌入MP3文件
