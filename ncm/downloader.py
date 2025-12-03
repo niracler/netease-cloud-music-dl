@@ -2,7 +2,10 @@
 
 import os
 import re
+import random
+import time
 import requests
+from mutagen import File as MutagenFile
 
 from ncm import config
 from ncm.api import CloudApi
@@ -38,7 +41,10 @@ def download_song_by_id(song_id, download_folder, sub_folder=True):
     download_song_by_song(song, download_folder, sub_folder)
 
 
-def download_song_by_song(song, download_folder, sub_folder=True, program=False):
+def download_song_by_song(song, download_folder, sub_folder=True, program=False, metadata_hint=None):
+    # polite random sleep to reduce burst requests
+    time.sleep(random.uniform(0.6, 1.6))
+
     # get song info
     api = CloudApi(user_cookie=config.USER_COOKIE)
     song_id = song['id']
@@ -61,6 +67,38 @@ def download_song_by_song(song, download_folder, sub_folder=True, program=False)
         3: '{} - {}{}'.format(song_name, artist_name, file_ext)
     }
     song_file_name = switcher_song.get(config.SONG_NAME_TYPE, song_file_name)
+
+    # prepend disc-track prefix when album has multiple discs
+    prefix = ''
+    disc_total = None
+    disc_number = None
+    track_number = None
+    track_total = None
+    if metadata_hint:
+        disc_total = metadata_hint.get('disc_total')
+        disc_number = metadata_hint.get('disc_number')
+        track_number = metadata_hint.get('track_number')
+        track_total = metadata_hint.get('track_total')
+    if track_number is None and not program:
+        track_number = song.get('no')
+    if disc_total is not None and disc_number is None and not program:
+        disc_raw = song.get('disc') or song.get('cd')
+        if isinstance(disc_raw, str):
+            parts = disc_raw.split('/')
+            if parts and parts[0].isdigit():
+                disc_number = int(parts[0])
+        elif isinstance(disc_raw, int):
+            disc_number = disc_raw
+    try:
+        disc_total_int = int(disc_total) if disc_total is not None else None
+        disc_number_int = int(disc_number) if disc_number is not None else None
+        track_number_int = int(track_number) if track_number is not None else None
+    except (TypeError, ValueError):
+        disc_total_int = disc_number_int = track_number_int = None
+    if disc_total_int and disc_total_int > 1 and disc_number_int and track_number_int:
+        width = max(2, len(str(track_total))) if track_total else 2
+        prefix = f"{disc_number_int}-{track_number_int:0{width}d} "
+    song_file_name = prefix + song_file_name
 
     # update song folder name by config, if support sub folder
     if sub_folder:
@@ -115,10 +153,25 @@ def download_song_by_song(song, download_folder, sub_folder=True, program=False)
     # resize cover
     resize_img(os.path.join(song_download_folder, cover_file_name))
 
-    # add metadata for song
+    # detect actual audio format; rename if server returned non-FLAC when requested
     song_file_path = os.path.join(song_download_folder, song_file_name)
+    actual_ext = _detect_audio_extension(song_file_path)
+    if actual_ext and actual_ext != os.path.splitext(song_file_name)[1].lower():
+        new_song_file_name = os.path.splitext(song_file_name)[0] + actual_ext
+        new_song_file_path = os.path.join(song_download_folder, new_song_file_name)
+        os.rename(song_file_path, new_song_file_path)
+        print('Detected actual format {}, renamed file to {}'.format(actual_ext, new_song_file_name))
+        song_file_name = new_song_file_name
+        song_file_path = new_song_file_path
+    elif not actual_ext:
+        print('Warning: unable to detect audio format for {}, proceeding with current extension'.format(song_file_name))
+
+    # fetch lyric for richer metadata (programs usually do not provide lyrics)
+    lyrics = None if program else api.get_song_lyrics(song_id)
+
+    # add metadata for song
     cover_file_path = os.path.join(song_download_folder, cover_file_name)
-    add_metadata_to_song(song_file_path, cover_file_path, song, program)
+    add_metadata_to_song(song_file_path, cover_file_path, song, program, lyrics, metadata_hint)
 
     # delete cover file
     os.remove(cover_file_path)
@@ -130,19 +183,23 @@ def download_file(file_url, file_name, folder):
     file_path = os.path.join(folder, file_name)
 
     response = requests.get(file_url, stream=True)
-    length = int(response.headers.get('Content-Length'))
+    length_header = response.headers.get('Content-Length')
+    length = int(length_header) if length_header else None
 
-    # TODO need to improve whether the file exists
-    if os.path.exists(file_path) and os.path.getsize(file_path) > length:
-        return True
-
-    progress = ProgressBar(file_name, length)
+    if os.path.exists(file_path):
+        if length and os.path.getsize(file_path) >= length:
+            print('File already exists, skip download:', file_name)
+            return True
+    progress = ProgressBar(file_name, length) if length else None
 
     with open(file_path, 'wb') as file:
         for buffer in response.iter_content(chunk_size=1024):
             if buffer:
                 file.write(buffer)
-                progress.refresh(len(buffer))
+                if progress:
+                    progress.refresh(len(buffer))
+    if not progress:
+        print('Downloaded {} (size: {} bytes)'.format(file_name, os.path.getsize(file_path)))
     return False
 
 
@@ -157,8 +214,11 @@ class ProgressBar(object):
         self.end_str = '\r'
 
     def __get_info(self):
-        return 'Progress: {:6.2f}%, {:8.2f}KB, [{:.30}]' \
-            .format(self.count / self.total * 100, self.total / 1024, self.file_name)
+        percent = (self.count / self.total * 100) if self.total else 0
+        total_kb = (self.total / 1024) if self.total else 0
+        if self.total:
+            return 'Progress: {:6.2f}%, {:8.2f}KB, [{:.30}]'.format(percent, total_kb, self.file_name)
+        return 'Progress: {:8.2f}KB, [{:.30}]'.format(self.count / 1024, self.file_name)
 
     def refresh(self, count):
         self.count += count
@@ -167,7 +227,7 @@ class ProgressBar(object):
             self.prev_count = self.count
             print(self.__get_info(), end=self.end_str)
         # Finish downloading
-        if self.count >= self.total:
+        if self.total and self.count >= self.total:
             self.end_str = '\n'
             print(self.__get_info(), end=self.end_str)
 
@@ -177,3 +237,21 @@ def format_string(string):
     Replace illegal character with ' '
     """
     return re.sub(r'[\\/:*?"<>|\t]', ' ', string)
+
+
+def _detect_audio_extension(file_path):
+    """Detect audio container and return proper extension (e.g. '.flac', '.mp3')."""
+    try:
+        audio = MutagenFile(file_path)
+    except Exception:
+        return None
+    if audio is None:
+        return None
+    name = audio.__class__.__name__.lower()
+    if 'flac' in name:
+        return '.flac'
+    if 'mp3' in name:
+        return '.mp3'
+    if 'mp4' in name or 'm4a' in name:
+        return '.m4a'
+    return None

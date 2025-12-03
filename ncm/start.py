@@ -16,6 +16,44 @@ config.load_config()
 api = CloudApi(user_cookie=config.USER_COOKIE)
 
 
+def _parse_disc_number(disc_raw):
+    if isinstance(disc_raw, str):
+        parts = disc_raw.split('/')
+        if parts and parts[0].isdigit():
+            return int(parts[0])
+    elif isinstance(disc_raw, int):
+        return disc_raw
+    return None
+
+
+def _build_disc_map(songs):
+    """Return (disc_track_count, disc_total)."""
+    disc_track_count = {}
+    disc_total = None
+    for song in songs:
+        disc_raw = song.get('disc') or song.get('cd')
+        disc_num = _parse_disc_number(disc_raw)
+        disc_total_from_song = None
+        if isinstance(disc_raw, str):
+            parts = disc_raw.split('/')
+            if len(parts) > 1 and parts[1].isdigit():
+                disc_total_from_song = int(parts[1])
+        if disc_num:
+            disc_track_count[disc_num] = disc_track_count.get(disc_num, 0) + 1
+        if disc_total is None and disc_total_from_song:
+            disc_total = disc_total_from_song
+    if disc_total is None and disc_track_count:
+        disc_total = max(disc_track_count.keys())
+    return disc_track_count, disc_total
+
+
+def _find_disc_from_album_songs(album_songs, song_id):
+    for s in album_songs:
+        if s.get('id') == song_id:
+            return _parse_disc_number(s.get('disc') or s.get('cd'))
+    return None
+
+
 def download_hot_songs(artist_id):
     songs = api.get_hot_songs(artist_id)
     folder_name = format_string(songs[0]['artists'][0]['name']) + ' - hot50'
@@ -30,9 +68,19 @@ def download_album_songs(album_id):
     songs = api.get_album_songs(album_id)
     folder_name = format_string(songs[0]['album']['name']) + ' - album'
     folder_path = os.path.join(config.DOWNLOAD_DIR, folder_name)
+    disc_track_count, disc_total = _build_disc_map(songs)
+
     for i, song in enumerate(songs):
+        disc_num = _parse_disc_number(song.get('disc') or song.get('cd'))
+        track_total = disc_track_count.get(disc_num) if disc_num else song.get('album', {}).get('size')
+        metadata_hint = {
+            'disc_number': disc_num,
+            'disc_total': disc_total,
+            'track_total': track_total
+        }
+
         print('{}: {}'.format(i + 1, song['name']))
-        download_song_by_song(song, folder_path, False)
+        download_song_by_song(song, folder_path, False, metadata_hint=metadata_hint)
 
 
 def download_program(program_id):
@@ -46,10 +94,37 @@ def download_playlist_songs(playlist_id):
     songs, playlist_name = api.get_playlist_songs(playlist_id)
     folder_name = format_string(playlist_name) + ' - playlist'
     folder_path = os.path.join(config.DOWNLOAD_DIR, folder_name)
+    album_cache = {}
     for i, song in enumerate(songs):
         song_detail = get_song_info_by_id(song['id'])
+        album_id = song_detail.get('album', {}).get('id')
+        disc_num = _parse_disc_number(song_detail.get('disc') or song_detail.get('cd'))
+        track_total = None
+        disc_total = None
+
+        if album_id:
+            if album_id not in album_cache:
+                album_songs = api.get_album_songs(album_id)
+                disc_track_count, disc_total_val = _build_disc_map(album_songs)
+                album_cache[album_id] = {
+                    'songs': album_songs,
+                    'disc_track_count': disc_track_count,
+                    'disc_total': disc_total_val
+                }
+            album_info = album_cache[album_id]
+            if disc_num is None:
+                disc_num = _find_disc_from_album_songs(album_info['songs'], song_detail['id'])
+            track_total = album_info['disc_track_count'].get(disc_num) if disc_num else None
+            disc_total = album_info['disc_total']
+
+        metadata_hint = {
+            'disc_number': disc_num,
+            'disc_total': disc_total,
+            'track_total': track_total
+        }
+
         print('{}: {}'.format(i + 1, song_detail['name']))
-        download_song_by_song(song_detail, folder_path, False)
+        download_song_by_song(song_detail, folder_path, False, metadata_hint=metadata_hint)
 
 
 def get_parse_id(song_id):

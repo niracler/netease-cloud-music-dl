@@ -5,7 +5,7 @@ import time
 
 from ncm.encrypt import encrypted_request
 from ncm.constants import get_headers, get_program_url, program_download_url
-from ncm.constants import song_download_url
+from ncm.constants import lyric_url, song_download_url
 from ncm.constants import get_song_url
 from ncm.constants import get_album_url
 from ncm.constants import get_artist_url
@@ -107,6 +107,26 @@ class CloudApi(object):
             song_url = result['data'][0]['url']
             return song_url
         return None
+
+    def get_song_lyrics(self, song_id):
+        """Get raw and translated lyrics for a song.
+        :param song_id:
+        :return: dict with keys 'lyric' and 'tlyric', values may be None
+        """
+        params = {
+            'id': song_id,
+            'lv': -1,  # full lyric
+            'kv': -1,  # karaoke
+            'tv': -1,  # translated lyric
+            'csrf_token': ''
+        }
+        result = self.post_request(lyric_url, params)
+        if not result:
+            return None
+        return {
+            'lyric': result.get('lrc', {}).get('lyric'),
+            'tlyric': result.get('tlyric', {}).get('lyric')
+        }
 
     def get_hot_songs(self, artist_id):
         """

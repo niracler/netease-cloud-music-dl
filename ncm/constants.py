@@ -31,6 +31,7 @@ def get_headers(user_cookie=None):
 headers = get_headers()
 song_download_url = 'http://music.163.com/weapi/song/enhance/player/url?csrf_token='
 program_download_url = 'http://music.163.com/weapi/song/enhance/player/url/v1?csrf_token='
+lyric_url = 'http://music.163.com/weapi/song/lyric?csrf_token='
 
 def get_song_url(song_id):
     return 'http://music.163.com/api/song/detail/?ids=[{}]'.format(song_id)
