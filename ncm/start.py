@@ -27,9 +27,11 @@ def _parse_disc_number(disc_raw):
 
 
 def _build_disc_map(songs):
-    """Return (disc_track_count, disc_total)."""
+    """Return (disc_track_count, disc_total, disc_track_number)."""
     disc_track_count = {}
     disc_total = None
+    disc_track_number = {}
+    disc_running_index = {}
     for song in songs:
         disc_raw = song.get('disc') or song.get('cd')
         disc_num = _parse_disc_number(disc_raw)
@@ -40,11 +42,13 @@ def _build_disc_map(songs):
                 disc_total_from_song = int(parts[1])
         if disc_num:
             disc_track_count[disc_num] = disc_track_count.get(disc_num, 0) + 1
+            disc_running_index[disc_num] = disc_running_index.get(disc_num, 0) + 1
+            disc_track_number[song.get('id')] = disc_running_index[disc_num]
         if disc_total is None and disc_total_from_song:
             disc_total = disc_total_from_song
     if disc_total is None and disc_track_count:
         disc_total = max(disc_track_count.keys())
-    return disc_track_count, disc_total
+    return disc_track_count, disc_total, disc_track_number
 
 
 def _find_disc_from_album_songs(album_songs, song_id):
@@ -68,14 +72,16 @@ def download_album_songs(album_id):
     songs = api.get_album_songs(album_id)
     folder_name = format_string(songs[0]['album']['name']) + ' - album'
     folder_path = os.path.join(config.DOWNLOAD_DIR, folder_name)
-    disc_track_count, disc_total = _build_disc_map(songs)
+    disc_track_count, disc_total, disc_track_number = _build_disc_map(songs)
 
     for i, song in enumerate(songs):
         disc_num = _parse_disc_number(song.get('disc') or song.get('cd'))
+        track_number = disc_track_number.get(song.get('id')) or song.get('no')
         track_total = disc_track_count.get(disc_num) if disc_num else song.get('album', {}).get('size')
         metadata_hint = {
             'disc_number': disc_num,
             'disc_total': disc_total,
+            'track_number': track_number,
             'track_total': track_total
         }
 
@@ -105,21 +111,26 @@ def download_playlist_songs(playlist_id):
         if album_id:
             if album_id not in album_cache:
                 album_songs = api.get_album_songs(album_id)
-                disc_track_count, disc_total_val = _build_disc_map(album_songs)
+                disc_track_count, disc_total_val, disc_track_number = _build_disc_map(album_songs)
                 album_cache[album_id] = {
                     'songs': album_songs,
                     'disc_track_count': disc_track_count,
-                    'disc_total': disc_total_val
+                    'disc_total': disc_total_val,
+                    'disc_track_number': disc_track_number
                 }
             album_info = album_cache[album_id]
             if disc_num is None:
                 disc_num = _find_disc_from_album_songs(album_info['songs'], song_detail['id'])
             track_total = album_info['disc_track_count'].get(disc_num) if disc_num else None
             disc_total = album_info['disc_total']
+            track_number = album_info['disc_track_number'].get(song_detail['id']) or song_detail.get('no')
+        else:
+            track_number = song_detail.get('no')
 
         metadata_hint = {
             'disc_number': disc_num,
             'disc_total': disc_total,
+            'track_number': track_number,
             'track_total': track_total
         }
 
